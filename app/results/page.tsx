@@ -2,14 +2,6 @@
 
 import { useSyncExternalStore, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-
-interface UserSession {
-  id: string;
-  name: string;
-  registrationNumber: string;
-  role: string;
-}
 
 interface CandidateResult {
   id: string;
@@ -26,9 +18,7 @@ interface PositionResult {
   candidates: CandidateResult[];
 }
 
-export default function AdminDashboardPage() {
-  const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+export default function PublicResultsPage() {
   const [ballotData, setBallotData] = useState<PositionResult[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,51 +31,35 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     if (!isMounted) return;
 
-    const storedUser = localStorage.getItem('currentUser');
-    if (!storedUser) {
-      router.push('/login');
-      return;
-    }
-
-    const parsedUser: UserSession = JSON.parse(storedUser);
-
-    if (parsedUser.role?.toUpperCase() !== 'ADMIN') {
-      router.push('/student/dashboard');
-      return;
-    }
-
     const fetchResults = async () => {
       try {
         const res = await fetch('/api/results');
         if (res.ok) {
           const data: PositionResult[] = await res.json();
           setBallotData(Array.isArray(data) ? data : []);
+        } else {
+          setBallotData([]);
         }
       } catch (err) {
-        console.error('Failed to load election results:', err);
+        console.error('Failed to load live election results:', err);
+        setBallotData([]);
       } finally {
         setLoading(false);
       }
     };
 
     Promise.resolve().then(() => {
-      setCurrentUser(parsedUser);
       fetchResults();
     });
 
     const interval = setInterval(fetchResults, 5000);
     return () => clearInterval(interval);
-  }, [isMounted, router]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('currentUser');
-    router.push('/login');
-  };
+  }, [isMounted]);
 
   if (!isMounted || loading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-600">
-        <p className="text-sm font-medium">Loading Admin Dashboard...</p>
+        <p className="text-sm font-medium">Loading Live Election Standings...</p>
       </main>
     );
   }
@@ -94,54 +68,42 @@ export default function AdminDashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 p-6">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         {/* Header Bar */}
         <header className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Election Control Center</h1>
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <h1 className="text-2xl font-bold text-slate-900">Live Election Standings</h1>
+            </div>
             <p className="text-sm text-slate-500 mt-1">
-              Logged in as <span className="text-blue-600 font-semibold">{currentUser?.name}</span> ({currentUser?.registrationNumber})
+              Real-time vote aggregation & candidate lead metrics
             </p>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-4">
+            <div className="bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 text-center">
+              <span className="block text-[10px] font-semibold text-slate-400 uppercase">Total Votes Recorded</span>
+              <span className="text-lg font-bold text-slate-900">{grandTotalVotes}</span>
+            </div>
             <Link
-              href="/admin/import"
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition shadow-sm"
-            >
-              Import CSV Register
-            </Link>
-            <button
-              onClick={handleLogout}
+              href="/student/dashboard"
               className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition border border-slate-200"
             >
-              Sign Out
-            </button>
+              Dashboard
+            </Link>
           </div>
         </header>
 
-        {/* Analytics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Ballots Cast</span>
-            <div className="text-3xl font-bold text-slate-900 mt-2">{grandTotalVotes}</div>
-            <p className="text-xs text-slate-500 mt-1">Across all positions</p>
+        {/* Results Body */}
+        {ballotData.length === 0 ? (
+          <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3 shadow-sm">
+            <p className="text-lg font-bold text-slate-800">No Election Results Available</p>
+            <p className="text-sm text-slate-500 max-w-md mx-auto">
+              Voting has either not commenced or no ballots have been registered yet. Check back once votes are cast.
+            </p>
           </div>
-          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Positions</span>
-            <div className="text-3xl font-bold text-slate-900 mt-2">{ballotData.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Universal & Scoped categories</p>
-          </div>
-          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Status</span>
-            <div className="text-3xl font-bold text-emerald-600 mt-2">Live</div>
-            <p className="text-xs text-slate-500 mt-1">Real-time polling active</p>
-          </div>
-        </div>
-
-        {/* Results Cards */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-bold text-slate-900">Live Position Results</h2>
-
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {ballotData.map((position) => (
               <div
@@ -149,15 +111,15 @@ export default function AdminDashboardPage() {
                 className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="font-bold text-lg text-slate-800">
+                  <h2 className="font-bold text-lg text-slate-800">
                     {position.positionName}
-                  </h3>
+                  </h2>
                   <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-mono font-medium">
                     Total: {position.totalVotesCast} Votes
                   </span>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {position.candidates.length === 0 ? (
                     <p className="text-sm text-slate-400 italic">No candidates registered for this position.</p>
                   ) : (
@@ -165,7 +127,7 @@ export default function AdminDashboardPage() {
                       const numPercentage = Number(cand.percentage);
 
                       return (
-                        <div key={cand.id} className="space-y-1">
+                        <div key={cand.id} className="space-y-1.5">
                           <div className="flex justify-between text-sm">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-slate-800">
@@ -181,7 +143,7 @@ export default function AdminDashboardPage() {
                               {cand.voteCount} votes ({numPercentage}%)
                             </span>
                           </div>
-                          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
                                 idx === 0 ? 'bg-blue-600' : 'bg-slate-400'
@@ -197,7 +159,7 @@ export default function AdminDashboardPage() {
               </div>
             ))}
           </div>
-        </section>
+        )}
       </div>
     </main>
   );
