@@ -170,13 +170,14 @@ export default function StudentDashboardPage() {
           </div>
         </section>
 
-        {/* Voting Actions Grid (Positioned at the Bottom) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+        {/* Voting Actions Grid (3-Column Layout Including Candidate Application) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+          {/* Cast Vote Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="space-y-2">
               <h2 className="text-lg font-bold text-slate-900">Cast Your Vote</h2>
               <p className="text-sm text-slate-500 leading-relaxed">
-                Participate in active elections for campus positions and representatives scoped to your course.
+                Participate in active elections for campus positions and representatives.
               </p>
             </div>
 
@@ -194,13 +195,31 @@ export default function StudentDashboardPage() {
             )}
           </div>
 
+          {/* Candidacy Application Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-slate-900">Run for Office</h2>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Want to represent your campus? Submit your candidacy request and manifesto goals.
+              </p>
+            </div>
+
+            <Link
+              href="/apply"
+              className="w-full text-center py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition shadow-sm block text-sm"
+            >
+              Apply as Candidate
+            </Link>
+          </div>
+
+          {/* Live Standings Card */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-slate-900">Election Standings</h2>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-semibold border border-emerald-200">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-semibold border border-emerald-200">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Status: Active Election
+                  Active
                 </span>
               </div>
               <p className="text-sm text-slate-500 leading-relaxed">

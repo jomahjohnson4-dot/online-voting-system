@@ -1,6 +1,48 @@
-import { User, Position, Candidate, Vote } from './types';
+export interface User {
+  id: string;
+  registrationNumber: string;
+  name: string;
+  phone?: string;
+  role: 'STUDENT' | 'ADMIN';
+  collegeId?: string;
+  departmentId?: string;
+  courseId?: string;
+  yearOfStudy?: number;
+}
 
-// Declare global types to keep database state alive across Next.js API reloads
+export interface Position {
+  id: string;
+  electionId: string;
+  name: string;
+}
+
+export interface Candidate {
+  id: string;
+  electionId: string;
+  positionId: string;
+  name: string;
+  manifesto: string;
+  registrationNumber?: string;
+  photoUrl?: string;
+  status?: 'Pending' | 'Approved' | 'Rejected' | string;
+  position?: string;
+  positionName?: string;
+  collegeId?: string;
+  departmentId?: string;
+  courseId?: string;
+  yearOfStudy?: number;
+}
+
+export interface Vote {
+  id: string;
+  electionId: string;
+  userId: string;
+  candidateId: string;
+  positionId: string;
+  createdAt: string;
+}
+
+// Global state bindings to preserve memory state across Next.js reloads
 declare global {
   var __db_users: User[] | undefined;
   var __db_positions: Position[] | undefined;
@@ -8,10 +50,10 @@ declare global {
   var __db_votes: Vote[] | undefined;
 }
 
-// Generate 100 student voter accounts using the University Registration Number format (e.g., 25100529140001)
+// Generate 100 student voter accounts
 const hundredStudents: User[] = Array.from({ length: 100 }, (_, index) => {
   const studentNum = String(index + 1).padStart(4, '0');
-  const regNum = `2510052914${studentNum}`; // University registration format
+  const regNum = `2510052914${studentNum}`;
 
   return {
     id: `u_${index + 1}`,
@@ -55,21 +97,27 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_1',
       name: 'Emmanuel Joseph',
+      registrationNumber: '25100529140001',
       manifesto: 'Enhancing student welfare, campus Wi-Fi, and digital access across campus.',
+      status: 'Approved',
     },
     {
       id: 'c_2',
       electionId: 'el_1',
       positionId: 'pos_1',
       name: 'Grace Michael',
+      registrationNumber: '25100529140002',
       manifesto: 'Accountable governance, transparent budgeting, and academic reform.',
+      status: 'Approved',
     },
     {
       id: 'c_3',
       electionId: 'el_1',
       positionId: 'pos_1',
       name: 'Mercy Emmanuel',
+      registrationNumber: '25100529140076',
       manifesto: 'Improving cafeteria standards, hostel welfare, and campus security.',
+      status: 'Pending',
     },
 
     // Vice President Candidates
@@ -78,14 +126,18 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_2',
       name: 'Sarah John',
+      registrationNumber: '25100529140004',
       manifesto: 'Promoting student health services and extracurricular engagement.',
+      status: 'Approved',
     },
     {
       id: 'c_5',
       electionId: 'el_1',
       positionId: 'pos_2',
       name: 'Kelvin Peter',
+      registrationNumber: '25100529140005',
       manifesto: 'Improving library resources and student hostel facilities.',
+      status: 'Pending',
     },
 
     // Course Representative Candidates
@@ -94,7 +146,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_3',
       name: 'Brian Frank',
+      registrationNumber: '25100529140006',
       manifesto: 'Advocating for timetable adjustments and lab equipment availability.',
+      status: 'Approved',
       collegeId: 'COICT',
       courseId: 'BIT',
       yearOfStudy: 2,
@@ -104,7 +158,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_3',
       name: 'Doreen Charles',
+      registrationNumber: '25100529140007',
       manifesto: 'Strengthening study group coordination and lecture material access.',
+      status: 'Pending',
       collegeId: 'COICT',
       courseId: 'BIT',
       yearOfStudy: 2,
@@ -114,7 +170,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_3',
       name: 'Moses Peter',
+      registrationNumber: '25100529140010',
       manifesto: 'Enhancing programming lab access for 1st year CS students.',
+      status: 'Approved',
       collegeId: 'COICT',
       courseId: 'CS',
       yearOfStudy: 1,
@@ -126,7 +184,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_4',
       name: 'Jackson Robert',
+      registrationNumber: '25100529140008',
       manifesto: 'Bridge between department faculty and students for fair grading reviews.',
+      status: 'Approved',
       collegeId: 'COICT',
       departmentId: 'CSE',
     },
@@ -135,7 +195,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_4',
       name: 'Hellen Alex',
+      registrationNumber: '25100529140009',
       manifesto: 'Organizing technical workshops, career fairs, and industry visits.',
+      status: 'Pending',
       collegeId: 'COICT',
       departmentId: 'CSE',
     },
@@ -144,7 +206,9 @@ export const candidates: Candidate[] =
       electionId: 'el_1',
       positionId: 'pos_4',
       name: 'Victor James',
+      registrationNumber: '25100529140011',
       manifesto: 'Upgrading telecommunication hardware kits and lab components.',
+      status: 'Pending',
       collegeId: 'COSTE',
       departmentId: 'ETE',
     },
@@ -152,3 +216,31 @@ export const candidates: Candidate[] =
 
 export const votes: Vote[] =
   globalThis.__db_votes || (globalThis.__db_votes = []);
+
+/**
+ * Deduplication helper function to remove duplicate candidate entries
+ * based on student Registration Number and targeted Position ID.
+ */
+export function getUniqueCandidates(list: Candidate[]): Candidate[] {
+  const map = new Map<string, Candidate>();
+
+  list.forEach((cand) => {
+    const reg = cand.registrationNumber || cand.name;
+    const pos = cand.positionId || cand.position || cand.positionName || 'default';
+    const uniqueKey = `${reg}_${pos}`.toLowerCase().trim();
+
+    if (!map.has(uniqueKey)) {
+      map.set(uniqueKey, cand);
+    } else {
+      const existing = map.get(uniqueKey)!;
+      map.set(uniqueKey, {
+        ...existing,
+        ...cand,
+        photoUrl: cand.photoUrl || existing.photoUrl,
+        status: cand.status || existing.status || 'Pending',
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}

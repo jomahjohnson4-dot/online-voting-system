@@ -32,11 +32,25 @@ interface PositionResult {
   candidates: CandidateResult[];
 }
 
+interface CandidacyApplication {
+  id: string;
+  name?: string;
+  fullName?: string;
+  registrationNumber?: string;
+  positionId?: string;
+  positionName?: string;
+  position?: string;
+  manifesto?: string;
+  photoUrl?: string;
+  status: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
   const [ballotData, setBallotData] = useState<PositionResult[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [candidateApps, setCandidateApps] = useState<CandidacyApplication[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Announcement State
@@ -54,6 +68,7 @@ export default function AdminDashboardPage() {
     () => false
   );
 
+  // Fetch election results from backend
   const fetchResults = useCallback(async () => {
     try {
       const res = await fetch('/api/results');
@@ -69,6 +84,65 @@ export default function AdminDashboardPage() {
       console.error('Failed to load election results:', err);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Fetch candidate requests and deduplicate records across API & LocalStorage
+  const fetchCandidacyRequests = useCallback(async () => {
+    try {
+      let apiCandidates: CandidacyApplication[] = [];
+      const res = await fetch('/api/candidates');
+      if (res.ok) {
+        const data = await res.json();
+        apiCandidates = data.candidates || [];
+      }
+
+      // Load local storage submissions & status updates
+      const localApps: CandidacyApplication[] = JSON.parse(
+        localStorage.getItem('candidateApplications') || '[]'
+      );
+
+      // Composite key for merging duplicates across API and LocalStorage
+      const getAppKey = (app: CandidacyApplication) => {
+        const reg = app.registrationNumber || '';
+        const pos = app.positionName || app.position || '';
+        const name = app.name || app.fullName || '';
+        
+        if (reg && reg !== 'N/A') return `${reg}_${pos}`.toLowerCase();
+        if (app.id) return app.id;
+        return `${name}_${pos}`.toLowerCase();
+      };
+
+      const localMap = new Map<string, CandidacyApplication>();
+      localApps.forEach((app) => {
+        localMap.set(getAppKey(app), app);
+      });
+
+      const uniqueMap = new Map<string, CandidacyApplication>();
+
+      // Process API candidates, combining photos and local status updates
+      apiCandidates.forEach((apiApp) => {
+        const key = getAppKey(apiApp);
+        const localApp = localMap.get(key);
+
+        uniqueMap.set(key, {
+          ...apiApp,
+          photoUrl: apiApp.photoUrl || localApp?.photoUrl,
+          status: localApp?.status || apiApp.status || 'Pending',
+        });
+      });
+
+      // Include local-only submissions if missing from API
+      localApps.forEach((localApp) => {
+        const key = getAppKey(localApp);
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, localApp);
+        }
+      });
+
+      setCandidateApps(Array.from(uniqueMap.values()));
+    } catch (err) {
+      console.error('Failed to load candidacy requests:', err);
     }
   }, []);
 
@@ -88,7 +162,6 @@ export default function AdminDashboardPage() {
       return;
     }
 
-    // Schedule initial synchronous state updates asynchronously to eliminate Next.js/React hydration warnings
     Promise.resolve().then(() => {
       const savedAnn = localStorage.getItem('electionAnnouncement') || '';
       const savedRules = localStorage.getItem('electionRules') || '';
@@ -99,11 +172,16 @@ export default function AdminDashboardPage() {
       setStudents(savedStudents);
       setCurrentUser(parsedUser);
       fetchResults();
+      fetchCandidacyRequests();
     });
 
-    const interval = setInterval(fetchResults, 5000);
+    const interval = setInterval(() => {
+      fetchResults();
+      fetchCandidacyRequests();
+    }, 5000);
+
     return () => clearInterval(interval);
-  }, [isMounted, router, fetchResults]);
+  }, [isMounted, router, fetchResults, fetchCandidacyRequests]);
 
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
@@ -128,7 +206,6 @@ export default function AdminDashboardPage() {
       registrationNumber: newStudentReg,
     };
 
-    // Attempt to persist candidate/voter through API if available, fallback to local storage
     try {
       await fetch('/api/voters', {
         method: 'POST',
@@ -157,6 +234,28 @@ export default function AdminDashboardPage() {
     const updatedList = students.filter((s) => s.id !== id);
     setStudents(updatedList);
     localStorage.setItem('studentRegister', JSON.stringify(updatedList));
+  };
+
+  const handleUpdateCandidacyStatus = async (appId: string, newStatus: 'Approved' | 'Rejected') => {
+    const updatedApps = candidateApps.map((app) =>
+      app.id === appId ? { ...app, status: newStatus } : app
+    );
+    setCandidateApps(updatedApps);
+
+    localStorage.setItem('candidateApplications', JSON.stringify(updatedApps));
+
+    try {
+      await fetch('/api/candidates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: appId, status: newStatus }),
+      });
+    } catch (err) {
+      console.warn('Backend offline; status saved locally:', err);
+    }
+
+    setStatusMessage(`Candidate status updated to ${newStatus}.`);
+    setTimeout(() => setStatusMessage(''), 4000);
   };
 
   if (!isMounted || loading) {
@@ -207,7 +306,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Analytics Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Ballots Cast</span>
             <div className="text-3xl font-bold text-slate-900 mt-2">{grandTotalVotes}</div>
@@ -219,11 +318,109 @@ export default function AdminDashboardPage() {
             <p className="text-xs text-slate-500 mt-1">Universal & Scoped categories</p>
           </div>
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Candidacy Requests</span>
+            <div className="text-3xl font-bold text-amber-600 mt-2">{candidateApps.length}</div>
+            <p className="text-xs text-slate-500 mt-1">Submitted by students</p>
+          </div>
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">System Status</span>
             <div className="text-3xl font-bold text-emerald-600 mt-2">Live</div>
             <p className="text-xs text-slate-500 mt-1">Real-time polling active</p>
           </div>
         </div>
+
+        {/* Candidacy Requests Verification Section */}
+        <section className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Student Candidacy Applications</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Review, verify, and approve candidate applications submitted by students.</p>
+            </div>
+            <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full font-mono">
+              Pending Verification: {candidateApps.filter((a) => (a.status || 'Pending') === 'Pending').length}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-slate-700 uppercase text-xs border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3">Applicant</th>
+                  <th className="px-4 py-3">Reg. Number</th>
+                  <th className="px-4 py-3">Position</th>
+                  <th className="px-4 py-3">Manifesto</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {candidateApps.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400 italic">
+                      No candidacy applications submitted yet.
+                    </td>
+                  </tr>
+                ) : (
+                  candidateApps.map((app, index) => {
+                    // Unique row key construction using ID, registration, position, or index
+                    const rowKey = app.id ? `${app.id}_${index}` : `cand_${index}_${app.registrationNumber || 'anon'}`;
+
+                    return (
+                      <tr key={rowKey} className="hover:bg-slate-50 transition">
+                        <td className="px-4 py-3 font-medium text-slate-900 flex items-center gap-3">
+                          {app.photoUrl ? (
+                            <img src={app.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-slate-200" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-500">
+                              👤
+                            </div>
+                          )}
+                          <span>{app.name || app.fullName || 'Unknown Student'}</span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                          {app.registrationNumber || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-800 text-xs">
+                          {app.positionName || app.position || 'President'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate" title={app.manifesto}>
+                          {app.manifesto || 'No manifesto provided.'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-full ${
+                              app.status === 'Approved'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                : app.status === 'Rejected'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            {app.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right space-x-2">
+                          <button
+                            onClick={() => handleUpdateCandidacyStatus(app.id, 'Approved')}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleUpdateCandidacyStatus(app.id, 'Rejected')}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-semibold rounded-lg transition"
+                          >
+                            Reject
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* Announcement Broadcast Section */}
         <section className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4">
@@ -313,8 +510,8 @@ export default function AdminDashboardPage() {
                     </td>
                   </tr>
                 ) : (
-                  students.map((student) => (
-                    <tr key={student.id} className="hover:bg-slate-50 transition">
+                  students.map((student, index) => (
+                    <tr key={student.id ? `${student.id}_${index}` : `student_${index}`} className="hover:bg-slate-50 transition">
                       <td className="px-4 py-3 font-medium text-slate-900">{student.name}</td>
                       <td className="px-4 py-3 font-mono text-slate-600">{student.registrationNumber}</td>
                       <td className="px-4 py-3 text-right">
@@ -338,8 +535,8 @@ export default function AdminDashboardPage() {
           <h2 className="text-xl font-bold text-slate-900">Live Position Results</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {ballotData.map((position) => (
-              <div key={position.positionId} className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4">
+            {ballotData.map((position, posIdx) => (
+              <div key={position.positionId || `pos_${posIdx}`} className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h3 className="font-bold text-lg text-slate-800">{position.positionName}</h3>
                   <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-mono">
@@ -355,7 +552,7 @@ export default function AdminDashboardPage() {
                       const numPercentage = Number(cand.percentage);
 
                       return (
-                        <div key={cand.id} className="space-y-1">
+                        <div key={cand.id ? `${cand.id}_${idx}` : `c_${posIdx}_${idx}`} className="space-y-1">
                           <div className="flex justify-between text-sm">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-slate-700">{cand.name}</span>
