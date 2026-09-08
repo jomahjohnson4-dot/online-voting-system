@@ -70,7 +70,7 @@ export default function LoginPage() {
             <input
               type="text"
               required
-              placeholder="e.g. S0195/0028/2024 or ADMIN001"
+              placeholder="e.g. 25100529140028 or ADMIN001"
               value={regNumber}
               onChange={(e) => setRegNumber(e.target.value)}
               className="w-full px-4 py-3 border border-slate-300 rounded-xl text-slate-900 bg-white placeholder-slate-400 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none transition font-medium"
@@ -87,7 +87,7 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center text-xs text-slate-400 space-y-1 pt-4 border-t border-slate-100">
-          <p>Demo Student Reg: <span className="font-mono text-slate-700 font-semibold">S0195/0028/2024</span></p>
+          <p>Demo Student Reg: <span className="font-mono text-slate-700 font-semibold">25100529140028</span></p>
           <p>Demo Admin Reg: <span className="font-mono text-slate-700 font-semibold">ADMIN001</span></p>
         </div>
       </div>

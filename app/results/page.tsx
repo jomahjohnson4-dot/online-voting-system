@@ -7,14 +7,17 @@ interface CandidateResult {
   id: string;
   name: string;
   manifesto?: string;
-  voteCount: number;
-  percentage: number | string;
+  voteCount?: number;
+  votes?: number;
+  percentage?: number | string;
 }
 
 interface PositionResult {
-  positionId: string;
-  positionName: string;
-  totalVotesCast: number;
+  positionId?: string;
+  id?: string;
+  positionName?: string;
+  name?: string;
+  totalVotesCast?: number;
   candidates: CandidateResult[];
 }
 
@@ -33,10 +36,16 @@ export default function PublicResultsPage() {
 
     const fetchResults = async () => {
       try {
-        const res = await fetch('/api/results');
+        const res = await fetch('/api/results', { cache: 'no-store' });
         if (res.ok) {
-          const data: PositionResult[] = await res.json();
-          setBallotData(Array.isArray(data) ? data : []);
+          const rawData = await res.json();
+
+          // Safely extract array whether backend returns array or wrapper object
+          const extractedPositions: PositionResult[] = Array.isArray(rawData)
+            ? rawData
+            : rawData.positions || rawData.results || [];
+
+          setBallotData(extractedPositions);
         } else {
           setBallotData([]);
         }
@@ -52,7 +61,7 @@ export default function PublicResultsPage() {
       fetchResults();
     });
 
-    const interval = setInterval(fetchResults, 5000);
+    const interval = setInterval(fetchResults, 3000);
     return () => clearInterval(interval);
   }, [isMounted]);
 
@@ -64,7 +73,15 @@ export default function PublicResultsPage() {
     );
   }
 
-  const grandTotalVotes = ballotData.reduce((acc, pos) => acc + pos.totalVotesCast, 0);
+  // Calculate total votes across all candidates
+  const grandTotalVotes = ballotData.reduce((acc, pos) => {
+    if (pos.totalVotesCast !== undefined) return acc + pos.totalVotesCast;
+    const posVotes = pos.candidates?.reduce(
+      (sum, c) => sum + (c.voteCount ?? c.votes ?? 0),
+      0
+    );
+    return acc + (posVotes || 0);
+  }, 0);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 p-6">
@@ -83,7 +100,9 @@ export default function PublicResultsPage() {
 
           <div className="flex items-center gap-4">
             <div className="bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 text-center">
-              <span className="block text-[10px] font-semibold text-slate-400 uppercase">Total Votes Recorded</span>
+              <span className="block text-[10px] font-semibold text-slate-400 uppercase">
+                Total Votes Recorded
+              </span>
               <span className="text-lg font-bold text-slate-900">{grandTotalVotes}</span>
             </div>
             <Link
@@ -96,7 +115,7 @@ export default function PublicResultsPage() {
         </header>
 
         {/* Results Body */}
-        {ballotData.length === 0 ? (
+        {ballotData.length === 0 || grandTotalVotes === 0 ? (
           <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center space-y-3 shadow-sm">
             <p className="text-lg font-bold text-slate-800">No Election Results Available</p>
             <p className="text-sm text-slate-500 max-w-md mx-auto">
@@ -105,59 +124,77 @@ export default function PublicResultsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {ballotData.map((position) => (
-              <div
-                key={position.positionId}
-                className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h2 className="font-bold text-lg text-slate-800">
-                    {position.positionName}
-                  </h2>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-mono font-medium">
-                    Total: {position.totalVotesCast} Votes
-                  </span>
-                </div>
+            {ballotData.map((position, posIndex) => {
+              // Deterministic key: avoids Math.random() during render
+              const posId = position.positionId || position.id || `pos_idx_${posIndex}`;
+              const posName = position.positionName || position.name || 'Position';
+              const posTotal =
+                position.totalVotesCast ??
+                position.candidates?.reduce(
+                  (acc, c) => acc + (c.voteCount ?? c.votes ?? 0),
+                  0
+                ) ??
+                0;
 
-                <div className="space-y-4">
-                  {position.candidates.length === 0 ? (
-                    <p className="text-sm text-slate-400 italic">No candidates registered for this position.</p>
-                  ) : (
-                    position.candidates.map((cand, idx) => {
-                      const numPercentage = Number(cand.percentage);
+              return (
+                <div
+                  key={posId}
+                  className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-4"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 className="font-bold text-lg text-slate-800">{posName}</h2>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-mono font-medium">
+                      Total: {posTotal} Votes
+                    </span>
+                  </div>
 
-                      return (
-                        <div key={cand.id} className="space-y-1.5">
-                          <div className="flex justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-800">
-                                {cand.name}
-                              </span>
-                              {idx === 0 && cand.voteCount > 0 && (
-                                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
-                                  LEAD
+                  <div className="space-y-4">
+                    {!position.candidates || position.candidates.length === 0 ? (
+                      <p className="text-sm text-slate-400 italic">
+                        No candidates registered for this position.
+                      </p>
+                    ) : (
+                      position.candidates.map((cand, candIdx) => {
+                        const candKey = cand.id || `cand_${posId}_${candIdx}`;
+                        const count = cand.voteCount ?? cand.votes ?? 0;
+                        const numPercentage =
+                          posTotal > 0
+                            ? Number(((count / posTotal) * 100).toFixed(1))
+                            : 0;
+
+                        return (
+                          <div key={candKey} className="space-y-1.5">
+                            <div className="flex justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-slate-800">
+                                  {cand.name}
                                 </span>
-                              )}
+                                {candIdx === 0 && count > 0 && (
+                                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200">
+                                    LEAD
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-500 font-mono">
+                                {count} votes ({numPercentage}%)
+                              </span>
                             </div>
-                            <span className="text-xs text-slate-500 font-mono">
-                              {cand.voteCount} votes ({numPercentage}%)
-                            </span>
+                            <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  candIdx === 0 && count > 0 ? 'bg-blue-600' : 'bg-slate-400'
+                                }`}
+                                style={{ width: `${numPercentage}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                idx === 0 ? 'bg-blue-600' : 'bg-slate-400'
-                              }`}
-                              style={{ width: `${numPercentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -12,14 +12,35 @@ export async function POST(request: Request) {
       );
     }
 
-    const regNo = body.registrationNumber.trim().toLowerCase();
-    const user = users.find(
-      (u) => u.registrationNumber.trim().toLowerCase() === regNo
+    const rawRegNo = String(body.registrationNumber).trim();
+    const cleanRegNo = rawRegNo.toLowerCase();
+
+    // 1. Check existing records in memory (case-insensitive)
+    let user = users.find(
+      (u) => u.registrationNumber.trim().toLowerCase() === cleanRegNo
     );
+
+    // 2. Fallback auto-registration for University numeric registration numbers (e.g., 25100529140070)
+    const isUniversityReg = /^\d{10,15}$/.test(rawRegNo);
+
+    if (!user && (isUniversityReg || rawRegNo.length >= 8)) {
+      user = {
+        id: `u_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        registrationNumber: rawRegNo,
+        name: `Student (${rawRegNo})`,
+        role: 'STUDENT',
+        collegeId: 'COICT',
+        departmentId: 'CSE',
+        courseId: 'BIT',
+        yearOfStudy: 1,
+      };
+
+      users.push(user);
+    }
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid registration number. Voter not registered.' },
+        { error: 'Invalid university registration number format.' },
         { status: 401 }
       );
     }
@@ -28,7 +49,8 @@ export async function POST(request: Request) {
       { message: 'Authentication successful', user },
       { status: 200 }
     );
-  } catch {
+  } catch (error) {
+    console.error('Login processing error:', error);
     return NextResponse.json(
       { error: 'Internal Server Error' },
       { status: 500 }

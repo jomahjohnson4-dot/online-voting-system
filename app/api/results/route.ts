@@ -3,15 +3,19 @@ import { positions, candidates, votes } from '@/lib/db';
 
 export async function GET() {
   try {
-    const results = positions.map((position) => {
+    const currentVotes = votes || [];
+    const currentPositions = positions || [];
+    const currentCandidates = candidates || [];
+
+    const results = currentPositions.map((position) => {
       // String coercion to prevent ID type mismatches (e.g., string vs number)
-      const positionVotes = votes.filter(
+      const positionVotes = currentVotes.filter(
         (v) => String(v.positionId) === String(position.id)
       );
       const totalVotesCast = positionVotes.length;
 
       // Calculate candidate standings
-      const candidatesWithVotes = candidates
+      const candidatesWithVotes = currentCandidates
         .filter((c) => String(c.positionId) === String(position.id))
         .map((candidate) => {
           const voteCount = positionVotes.filter(
@@ -27,7 +31,7 @@ export async function GET() {
             id: candidate.id,
             name: candidate.name,
             manifesto: candidate.manifesto,
-            votes: voteCount, // Compatible with candidate.votes
+            votes: voteCount,
             voteCount,
             percentage,
           };
@@ -44,10 +48,15 @@ export async function GET() {
       };
     });
 
-    // Returns both raw array and wrapper object for client compatibility
+    // Compute unique voters who have submitted ballots
+    const uniqueVoterIds = new Set(
+      currentVotes.map((v) => String(v.voterId || (v as unknown as { userId?: string }).userId))
+    );
+
     return NextResponse.json(
       {
-        totalVotes: votes.length,
+        totalVotes: currentVotes.length,
+        totalBallots: uniqueVoterIds.size,
         positions: results,
         results, // Fallback alias
       },

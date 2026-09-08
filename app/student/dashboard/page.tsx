@@ -21,6 +21,10 @@ export default function StudentDashboardPage() {
   const [hasVoted, setHasVoted] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Dedicated states to prevent notice interference
+  const [announcement, setAnnouncement] = useState('');
+  const [customRules, setCustomRules] = useState('');
+
   const isMounted = useSyncExternalStore(
     () => () => {},
     () => true,
@@ -30,38 +34,35 @@ export default function StudentDashboardPage() {
   useEffect(() => {
     if (!isMounted) return;
 
-    const storedUser = localStorage.getItem('currentUser');
-    if (!storedUser) {
-      router.push('/login');
-      return;
-    }
+    const loadSessionAndData = async () => {
+      const storedUser = localStorage.getItem('currentUser');
+      if (!storedUser) {
+        router.push('/login');
+        return;
+      }
 
-    const parsedUser: StudentSession = JSON.parse(storedUser);
-    setStudent(parsedUser);
-
-    // Check voting status for current user session
-    const checkVotingStatus = async () => {
       try {
-        const res = await fetch('/api/results');
-        if (res.ok) {
-          const results = await res.json();
-          // Evaluate if candidate counts reflect completed ballot
-          const votedKey = `voted_${parsedUser.id}`;
-          const localVoted = localStorage.getItem(votedKey);
-          if (localVoted === 'true') {
-            setHasVoted(true);
-          }
+        const parsedUser: StudentSession = JSON.parse(storedUser);
+        setStudent(parsedUser);
+
+        const votedKey = `voted_${parsedUser.id}`;
+        const localVoted = localStorage.getItem(votedKey);
+        if (localVoted === 'true') {
+          setHasVoted(true);
         }
+
+        setAnnouncement(localStorage.getItem('electionAnnouncement') || '');
+        setCustomRules(localStorage.getItem('electionRules') || '');
       } catch (err) {
-        console.error('Failed to check voting status:', err);
+        console.error('Failed to load dashboard state:', err);
+        localStorage.removeItem('currentUser');
+        router.push('/login');
       } finally {
         setLoading(false);
       }
     };
 
-    Promise.resolve().then(() => {
-      checkVotingStatus();
-    });
+    loadSessionAndData();
   }, [isMounted, router]);
 
   const handleLogout = () => {
@@ -79,7 +80,7 @@ export default function StudentDashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         {/* Header Section */}
         <header className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
           <div>
@@ -89,6 +90,7 @@ export default function StudentDashboardPage() {
             </p>
           </div>
           <button
+            type="button"
             onClick={handleLogout}
             className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-semibold rounded-xl transition border border-red-100 self-start md:self-auto"
           >
@@ -99,29 +101,81 @@ export default function StudentDashboardPage() {
         {/* Student Meta Details */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-sm">
           <div>
-            <span className="block text-xs text-slate-400 font-medium">College</span>
-            <span className="font-semibold text-slate-800">{student?.collegeId || 'CoICT'}</span>
+            <span className="block text-xs text-slate-400 font-medium uppercase tracking-wider">College</span>
+            <span className="font-semibold text-slate-800 mt-1 block">{student?.collegeId || 'CoICT'}</span>
           </div>
           <div>
-            <span className="block text-xs text-slate-400 font-medium">Department</span>
-            <span className="font-semibold text-slate-800">{student?.departmentId || 'CSE'}</span>
+            <span className="block text-xs text-slate-400 font-medium uppercase tracking-wider">Department</span>
+            <span className="font-semibold text-slate-800 mt-1 block">{student?.departmentId || 'CSE'}</span>
           </div>
           <div>
-            <span className="block text-xs text-slate-400 font-medium">Course</span>
-            <span className="font-semibold text-slate-800">{student?.courseId || 'BIT'}</span>
+            <span className="block text-xs text-slate-400 font-medium uppercase tracking-wider">Course</span>
+            <span className="font-semibold text-slate-800 mt-1 block">{student?.courseId || 'BIT'}</span>
           </div>
           <div>
-            <span className="block text-xs text-slate-400 font-medium">Year of Study</span>
-            <span className="font-semibold text-slate-800">Year {student?.yearOfStudy || 1}</span>
+            <span className="block text-xs text-slate-400 font-medium uppercase tracking-wider">Year of Study</span>
+            <span className="font-semibold text-slate-800 mt-1 block">Year {student?.yearOfStudy || 1}</span>
           </div>
         </div>
 
-        {/* Voting Actions Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Dynamic Admin Announcement Banner */}
+        {announcement && (
+          <section className="bg-amber-50 border border-amber-200 p-5 rounded-2xl shadow-sm text-amber-900 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📢</span>
+              <h2 className="font-bold text-base text-amber-950">Official Election Announcement</h2>
+            </div>
+            <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line bg-amber-100/50 p-3 rounded-xl border border-amber-200/60">
+              {announcement}
+            </p>
+          </section>
+        )}
+
+        {/* App Guide & Permanent Voter Instructions Section */}
+        <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+            <span className="text-lg">💡</span>
+            <h2 className="text-lg font-bold text-slate-900">About This Voting Application & Guidelines</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-600">
+            <div className="space-y-2">
+              <h3 className="font-semibold text-slate-800">How to Use This Portal:</h3>
+              <ul className="list-disc list-inside space-y-1.5 leading-relaxed">
+                <li>Click <strong>Go to Official Ballot</strong> to view available candidates.</li>
+                <li>Carefully review candidate profiles and manifestos.</li>
+                <li>Submit your choices for each contested position.</li>
+                <li>Check <strong>View Live Results</strong> to follow real-time election turnout.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-800">Key Voting Rules:</h3>
+              <ul className="list-disc list-inside space-y-1.5 leading-relaxed">
+                <li>Each registered student is permitted to vote <strong>only once</strong>.</li>
+                <li>Votes are encrypted and anonymously logged for full election transparency.</li>
+                <li>Once submitted, votes cannot be edited or modified.</li>
+              </ul>
+
+              {/* Additional Admin Notice */}
+              {customRules && (
+                <div className="pt-1">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Additional Admin Notice:</span>
+                  <p className="whitespace-pre-line leading-relaxed text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs font-medium">
+                    {customRules}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Voting Actions Grid (Positioned at the Bottom) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="space-y-2">
               <h2 className="text-lg font-bold text-slate-900">Cast Your Vote</h2>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 leading-relaxed">
                 Participate in active elections for campus positions and representatives scoped to your course.
               </p>
             </div>
@@ -135,23 +189,23 @@ export default function StudentDashboardPage() {
                 href="/vote"
                 className="w-full text-center py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition shadow-sm block text-sm"
               >
-                Go to Official Ballot
+                Go to Official Ballot →
               </Link>
             )}
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="space-y-2">
-              <h2 className="text-lg font-bold text-slate-900">Election Standings</h2>
-              <p className="text-sm text-slate-500">
-                Track candidate tallies and view live vote percentage breakdowns in real time.
-              </p>
-              <div className="pt-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-slate-900">Election Standings</h2>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-semibold border border-emerald-200">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   Status: Active Election
                 </span>
               </div>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Track candidate tallies and view live vote percentage breakdowns in real time.
+              </p>
             </div>
 
             <Link
@@ -162,6 +216,7 @@ export default function StudentDashboardPage() {
             </Link>
           </div>
         </div>
+
       </div>
     </main>
   );

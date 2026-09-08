@@ -4,16 +4,23 @@ import { Vote } from '@/lib/types';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Invalid request body.' },
+        { status: 400 }
+      );
+    }
 
     // Support both payload structures: { userId, selections } OR { votes: [...] }
-    let voterId = body.userId;
+    let voterId = body.userId || body.voterId;
     let selections: Record<string, string> = body.selections || {};
     const electionId = String(body.electionId || 'el_1');
 
     // Normalize payload if coming as an array of votes from client
     if (Array.isArray(body.votes) && body.votes.length > 0) {
-      voterId = body.votes[0].studentId || body.votes[0].userId;
+      voterId = body.votes[0].studentId || body.votes[0].userId || body.votes[0].voterId;
       selections = {};
       body.votes.forEach((v: { positionId: string | number; candidateId: string | number }) => {
         if (v.positionId && v.candidateId) {
@@ -36,15 +43,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const cleanVoterId = String(voterId);
+    const cleanVoterId = String(voterId).trim();
 
     // 2. Ensure voter account exists (with fallback auto-registration for dev sessions)
-    let user = users.find((u) => String(u.id) === cleanVoterId);
+    let user = users.find(
+      (u) =>
+        String(u.id) === cleanVoterId ||
+        u.registrationNumber.trim().toLowerCase() === cleanVoterId.toLowerCase()
+    );
+
     if (!user) {
       user = {
         id: cleanVoterId,
-        name: body.userName || 'Student Voter',
-        registrationNumber: cleanVoterId,
+        name: body.userName || `Student (${cleanVoterId})`,
+        registrationNumber: cleanVoterId.toUpperCase(),
         role: 'STUDENT',
       } as (typeof users)[0];
       users.push(user);
@@ -52,7 +64,11 @@ export async function POST(request: Request) {
 
     // 3. Double-submission guard per election (using string coercion)
     const hasVotedInElection = votes.some(
-      (v) => String(v.voterId) === cleanVoterId && String(v.electionId) === electionId
+      (v) =>
+        (String(v.voterId) === String(user?.id) ||
+          String(v.voterId) === cleanVoterId ||
+          (v as unknown as { userId?: string }).userId === cleanVoterId) &&
+        String(v.electionId) === electionId
     );
 
     if (hasVotedInElection) {
@@ -71,7 +87,7 @@ export async function POST(request: Request) {
 
       const newVote: Vote = {
         id: `v_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        voterId: cleanVoterId,
+        voterId: String(user?.id || cleanVoterId),
         electionId: electionId,
         positionId: selectedPosId,
         candidateId: selectedCandId,
@@ -82,11 +98,12 @@ export async function POST(request: Request) {
 
       // Increment candidate vote count safely across string/number types
       const candidate = candidates.find((c) => String(c.id) === selectedCandId) as
-        | (typeof candidates[0] & { votes?: number })
+        | (typeof candidates[0] & { votes?: number; voteCount?: number })
         | undefined;
 
       if (candidate) {
         candidate.votes = (candidate.votes || 0) + 1;
+        candidate.voteCount = (candidate.voteCount || 0) + 1;
       }
     });
 
