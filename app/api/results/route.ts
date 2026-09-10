@@ -1,27 +1,38 @@
 import { NextResponse } from 'next/server';
-import { positions, candidates, votes } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export async function GET() {
   try {
-    const currentVotes = votes || [];
-    const currentPositions = positions || [];
-    const currentCandidates = candidates || [];
+    // 1. Fetch positions along with candidates and total vote count in parallel
+    const [positions, totalVotes, totalBallots] = await Promise.all([
+      db.position.findMany({
+        orderBy: { id: 'asc' },
+        include: {
+          candidates: {
+            include: {
+              _count: {
+                select: { votes: true },
+              },
+            },
+          },
+          _count: {
+            select: { votes: true },
+          },
+        },
+      }),
+      db.vote.count(),
+      db.vote.groupBy({
+        by: ['userId'],
+      }),
+    ]);
 
-    const results = currentPositions.map((position) => {
-      // String coercion to prevent ID type mismatches (e.g., string vs number)
-      const positionVotes = currentVotes.filter(
-        (v) => String(v.positionId) === String(position.id)
-      );
-      const totalVotesCast = positionVotes.length;
+    // 2. Format results structure for client consumption
+    const results = positions.map((position) => {
+      const totalVotesCast = position._count.votes;
 
-      // Calculate candidate standings
-      const candidatesWithVotes = currentCandidates
-        .filter((c) => String(c.positionId) === String(position.id))
+      const candidatesWithVotes = position.candidates
         .map((candidate) => {
-          const voteCount = positionVotes.filter(
-            (v) => String(v.candidateId) === String(candidate.id)
-          ).length;
-
+          const voteCount = candidate._count.votes;
           const percentage =
             totalVotesCast > 0
               ? Number(((voteCount / totalVotesCast) * 100).toFixed(1))
@@ -48,15 +59,10 @@ export async function GET() {
       };
     });
 
-    // Compute unique voters who have submitted ballots
-    const uniqueVoterIds = new Set(
-      currentVotes.map((v) => String(v.voterId || (v as unknown as { userId?: string }).userId))
-    );
-
     return NextResponse.json(
       {
-        totalVotes: currentVotes.length,
-        totalBallots: uniqueVoterIds.size,
+        totalVotes,
+        totalBallots: totalBallots.length,
         positions: results,
         results, // Fallback alias
       },

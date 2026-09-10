@@ -1,13 +1,20 @@
 import { NextResponse } from 'next/server';
-import { candidates, Candidate, getUniqueCandidates } from '@/lib/db';
+import { db } from '@/lib/db';
 
-// GET: Fetch all active candidates deduplicated (used by Admin & Student Ballot)
+// GET: Fetch all active candidates from PostgreSQL
 export async function GET() {
-  const uniqueCandidates = getUniqueCandidates(candidates);
-  return NextResponse.json({ candidates: uniqueCandidates }, { status: 200 });
+  try {
+    const candidates = await db.candidate.findMany({
+      orderBy: { id: 'asc' },
+    });
+    return NextResponse.json({ candidates }, { status: 200 });
+  } catch (error) {
+    console.error('Fetch candidates error:', error);
+    return NextResponse.json({ error: 'Failed to fetch candidates' }, { status: 500 });
+  }
 }
 
-// POST: Submit a new candidacy request
+// POST: Submit a new candidacy request or update existing application
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -20,36 +27,48 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if candidate application already exists for this registration & position
     const candidatePosition = positionId || 'pos_1';
     const regNum = registrationNumber || name;
 
-    const existingIndex = candidates.findIndex(
-      (c) =>
-        (c.registrationNumber || c.name).toLowerCase() === regNum.toLowerCase() &&
-        (c.positionId || c.position) === candidatePosition
-    );
+    // Check if an application already exists for this registration & position
+    const existingCandidate = await db.candidate.findFirst({
+      where: {
+        registrationNumber: regNum,
+        positionId: candidatePosition,
+      },
+    });
 
-    const newCandidate: Candidate = {
-      id: existingIndex !== -1 ? candidates[existingIndex].id : `c_${Date.now()}`,
-      electionId: 'el_1',
-      positionId: candidatePosition,
-      name,
-      manifesto,
-      status: 'Pending',
-      registrationNumber,
-      photoUrl,
-    };
+    let candidate;
 
-    if (existingIndex !== -1) {
-      // Update existing record rather than pushing a duplicate
-      candidates[existingIndex] = { ...candidates[existingIndex], ...newCandidate };
+    if (existingCandidate) {
+      // Update existing record
+      candidate = await db.candidate.update({
+        where: { id: existingCandidate.id },
+        data: {
+          name,
+          manifesto,
+          photoUrl: photoUrl || existingCandidate.photoUrl,
+          status: 'Pending',
+        },
+      });
     } else {
-      candidates.push(newCandidate);
+      // Create new candidate record
+      candidate = await db.candidate.create({
+        data: {
+          id: `c_${Date.now()}`,
+          electionId: 'el_1',
+          positionId: candidatePosition,
+          name,
+          manifesto,
+          registrationNumber: regNum,
+          photoUrl: photoUrl || null,
+          status: 'Pending',
+        },
+      });
     }
 
     return NextResponse.json(
-      { message: 'Candidate request submitted successfully', candidate: newCandidate },
+      { message: 'Candidate request submitted successfully', candidate },
       { status: 201 }
     );
   } catch (error) {
@@ -71,17 +90,26 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Locate candidate in in-memory list
-    const candidateIndex = candidates.findIndex((c) => c.id === id);
+    // Verify candidate existence
+    const existingCandidate = await db.candidate.findUnique({
+      where: { id },
+    });
 
-    if (candidateIndex !== -1) {
-      candidates[candidateIndex].status = status;
-    } else {
+    if (!existingCandidate) {
       return NextResponse.json({ error: 'Candidate not found.' }, { status: 404 });
     }
 
+    // Update status in PostgreSQL
+    const updatedCandidate = await db.candidate.update({
+      where: { id },
+      data: { status },
+    });
+
     return NextResponse.json(
-      { message: `Candidate status updated to ${status}`, id, status },
+      {
+        message: `Candidate status updated to ${status}`,
+        candidate: updatedCandidate,
+      },
       { status: 200 }
     );
   } catch (error) {

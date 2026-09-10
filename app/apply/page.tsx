@@ -43,17 +43,67 @@ export default function ApplyCandidatePage() {
     };
   });
 
-  // Convert uploaded image file to Base64
+  // Convert uploaded image file to lightweight Base64 string via Canvas
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setPhotoPreview(base64String);
-        setFormData((prev) => ({ ...prev, photoUrl: base64String }));
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          // Resize image to max 300x300 for optimized payload
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 300;
+          const MAX_HEIGHT = 300;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Convert to JPEG with 0.7 compression ratio
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          setPhotoPreview(compressedBase64);
+          setFormData((prev) => ({ ...prev, photoUrl: compressedBase64 }));
+        };
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Safe client-side storage helper to avoid QuotaExceededError
+  const safeSaveLocalApplication = (payloadData: Record<string, unknown>) => {
+    try {
+      const existingAppsStr = localStorage.getItem('candidateApplications');
+      const existingApps = existingAppsStr ? JSON.parse(existingAppsStr) : [];
+      
+      // Omit large base64 image strings from localStorage to conserve quota
+      const lightweightItem = {
+        ...payloadData,
+        id: `app_${Date.now()}`,
+        photoUrl: typeof payloadData.photoUrl === 'string' && payloadData.photoUrl.startsWith('data:image')
+          ? '[Stored in Server Memory]'
+          : payloadData.photoUrl,
+      };
+
+      localStorage.setItem('candidateApplications', JSON.stringify([...existingApps, lightweightItem]));
+    } catch (err) {
+      console.warn('localStorage quota exceeded, skipped local caching:', err);
     }
   };
 
@@ -81,16 +131,15 @@ export default function ApplyCandidatePage() {
     };
 
     try {
-      // 1. Submit application to backend API for admin visibility
+      // 1. Submit application to backend API
       const res = await fetch('/api/candidates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      // 2. Persist local backup application queue
-      const existingApps = JSON.parse(localStorage.getItem('candidateApplications') || '[]');
-      localStorage.setItem('candidateApplications', JSON.stringify([...existingApps, { ...payload, id: `app_${Date.now()}` }]));
+      // 2. Persist safely to local backup
+      safeSaveLocalApplication(payload);
 
       if (res.ok) {
         setSubmitted(true);
@@ -101,9 +150,8 @@ export default function ApplyCandidatePage() {
       }
     } catch (err) {
       console.error('API submission error:', err);
-      // Fallback local persistence if server endpoint is offline
-      const existingApps = JSON.parse(localStorage.getItem('candidateApplications') || '[]');
-      localStorage.setItem('candidateApplications', JSON.stringify([...existingApps, { ...payload, id: `app_${Date.now()}` }]));
+      // Fallback local persistence if server endpoint is unreachable
+      safeSaveLocalApplication(payload);
       setSubmitted(true);
     } finally {
       setSubmitting(false);

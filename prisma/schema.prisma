@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  registrationNumber String   @unique
+  name               String
+  phone              String?
+  role               Role     @default(STUDENT)
+  collegeId          String?
+  departmentId       String?
+  courseId           String?
+  yearOfStudy        Int?
+  createdAt          DateTime @default(now())
+  votes              Vote[]
+}
+
+model Position {
+  id         String      @id @default(uuid())
+  electionId String
+  name       String
+  candidates Candidate[]
+  votes      Vote[]
+}
+
+model Candidate {
+  id                 String   @id @default(uuid())
+  electionId         String
+  positionId         String
+  position           Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  name               String
+  manifesto          String
+  registrationNumber String?
+  photoUrl           String?
+  status             String   @default("Pending")
+  createdAt          DateTime @default(now())
+  votes              Vote[]
+}
+
+model Vote {
+  id          String    @id @default(uuid())
+  electionId  String    @default("el_1")
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  positionId  String
+  position    Position  @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, positionId, electionId])
+}

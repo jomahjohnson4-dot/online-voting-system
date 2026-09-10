@@ -3,6 +3,7 @@
 import { useSyncExternalStore, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import ExportCandidateActions from '@/app/components/ExportCandidateActions';
 
 interface UserSession {
   id: string;
@@ -279,13 +280,18 @@ export default function AdminDashboardPage() {
               Logged in as <span className="text-blue-600 font-semibold">{currentUser?.name}</span> ({currentUser?.registrationNumber})
             </p>
           </div>
+          
           <div className="flex flex-wrap items-center gap-3">
+            {/* Download PDF & CSV Action Toolbar */}
+            <ExportCandidateActions candidates={candidateApps} />
+
             <Link
               href="/admin/import"
               className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition shadow-sm"
             >
-              Import CSV Register
+              Import CSV
             </Link>
+            
             <button
               onClick={handleLogout}
               className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition border border-slate-300"
@@ -294,6 +300,30 @@ export default function AdminDashboardPage() {
             </button>
           </div>
         </header>
+
+        {/* Quick Route Shortcuts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            href="/admin/candidates"
+            className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-500 hover:shadow-md transition flex justify-between items-center group"
+          >
+            <div>
+              <span className="font-bold text-slate-800 group-hover:text-blue-600 transition">Manage Candidates Page &rarr;</span>
+              <p className="text-xs text-slate-500">Dedicated view to review candidate profiles and application statuses.</p>
+            </div>
+          </Link>
+
+          <Link
+            href="/admin/reports"
+            className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-emerald-500 hover:shadow-md transition flex justify-between items-center group"
+          >
+            <div>
+              <span className="font-bold text-slate-800 group-hover:text-emerald-600 transition">Applicant Reports Page &rarr;</span>
+              <p className="text-xs text-slate-500">View election analytics and export candidate registry files.</p>
+            </div>
+            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Reports</span>
+          </Link>
+        </div>
 
         {/* Feedback Alert */}
         {statusMessage && (
@@ -362,7 +392,6 @@ export default function AdminDashboardPage() {
                   </tr>
                 ) : (
                   candidateApps.map((app, index) => {
-                    // Unique row key construction using ID, registration, position, or index
                     const rowKey = app.id ? `${app.id}_${index}` : `cand_${index}_${app.registrationNumber || 'anon'}`;
 
                     return (

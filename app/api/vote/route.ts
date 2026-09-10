@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { votes, candidates, users } from '@/lib/db';
-import { Vote } from '@/lib/types';
+import { db } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -45,66 +44,56 @@ export async function POST(request: Request) {
 
     const cleanVoterId = String(voterId).trim();
 
-    // 2. Ensure voter account exists (with fallback auto-registration for dev sessions)
-    let user = users.find(
-      (u) =>
-        String(u.id) === cleanVoterId ||
-        u.registrationNumber.trim().toLowerCase() === cleanVoterId.toLowerCase()
-    );
+    // 2. Fetch user or perform auto-registration in PostgreSQL
+    let user = await db.user.findFirst({
+      where: {
+        OR: [
+          { id: cleanVoterId },
+          { registrationNumber: { equals: cleanVoterId, mode: 'insensitive' } },
+        ],
+      },
+    });
 
     if (!user) {
-      user = {
-        id: cleanVoterId,
-        name: body.userName || `Student (${cleanVoterId})`,
-        registrationNumber: cleanVoterId.toUpperCase(),
-        role: 'STUDENT',
-      } as (typeof users)[0];
-      users.push(user);
+      user = await db.user.create({
+        data: {
+          id: cleanVoterId.startsWith('u_') ? cleanVoterId : `u_${Date.now()}`,
+          name: body.userName || `Student (${cleanVoterId})`,
+          registrationNumber: cleanVoterId.toUpperCase(),
+          role: 'STUDENT',
+        },
+      });
     }
 
-    // 3. Double-submission guard per election (using string coercion)
-    const hasVotedInElection = votes.some(
-      (v) =>
-        (String(v.voterId) === String(user?.id) ||
-          String(v.voterId) === cleanVoterId ||
-          (v as unknown as { userId?: string }).userId === cleanVoterId) &&
-        String(v.electionId) === electionId
-    );
+    // 3. Check double-submission guard in PostgreSQL
+    const existingVote = await db.vote.findFirst({
+      where: {
+        userId: user.id,
+        electionId: electionId,
+      },
+    });
 
-    if (hasVotedInElection) {
+    if (existingVote) {
       return NextResponse.json(
         { error: 'You have already cast your vote in this election.' },
         { status: 400 }
       );
     }
 
-    // 4. Record vote entries and sync candidate vote counts
-    const currentTimestamp = new Date().toISOString();
+    // 4. Atomic transaction to create vote records in PostgreSQL
+    const voteEntries = Object.entries(selections).map(([positionId, candidateId]) => ({
+      id: `v_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      userId: user.id,
+      electionId: electionId,
+      positionId: String(positionId),
+      candidateId: String(candidateId),
+    }));
 
-    Object.entries(selections).forEach(([positionId, candidateId]) => {
-      const selectedPosId = String(positionId);
-      const selectedCandId = String(candidateId);
-
-      const newVote: Vote = {
-        id: `v_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        voterId: String(user?.id || cleanVoterId),
-        electionId: electionId,
-        positionId: selectedPosId,
-        candidateId: selectedCandId,
-        timestamp: currentTimestamp,
-      };
-
-      votes.push(newVote);
-
-      // Increment candidate vote count safely across string/number types
-      const candidate = candidates.find((c) => String(c.id) === selectedCandId) as
-        | (typeof candidates[0] & { votes?: number; voteCount?: number })
-        | undefined;
-
-      if (candidate) {
-        candidate.votes = (candidate.votes || 0) + 1;
-        candidate.voteCount = (candidate.voteCount || 0) + 1;
-      }
+    await db.$transaction(async (tx) => {
+      // Create vote entries
+      await tx.vote.createMany({
+        data: voteEntries,
+      });
     });
 
     return NextResponse.json(

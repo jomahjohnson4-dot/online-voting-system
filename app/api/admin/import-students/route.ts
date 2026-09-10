@@ -1,59 +1,73 @@
 import { NextResponse } from 'next/server';
-import { users } from '@/lib/db';
-import { User } from '@/lib/types';
+import { db } from '@/lib/db';
 
-export async function POST(request: Request) {
+export async function GET() {
   try {
-    const body = await request.json().catch(() => null);
+    const [dbPositions, dbCandidates, dbVotes] = await Promise.all([
+      db.position.findMany({ orderBy: { id: 'asc' } }),
+      db.candidate.findMany({ orderBy: { id: 'asc' } }),
+      db.vote.findMany(),
+    ]);
 
-    if (!body || !Array.isArray(body.students)) {
-      return NextResponse.json(
-        { error: 'Invalid payload. Expected an array of student records.' },
-        { status: 400 }
+    const results = dbPositions.map((position) => {
+      const positionVotes = dbVotes.filter(
+        (v) => String(v.positionId) === String(position.id)
       );
-    }
+      const totalVotesCast = positionVotes.length;
 
-    const importedStudents: User[] = body.students;
-    let addedCount = 0;
+      const candidatesWithVotes = dbCandidates
+        .filter((c) => String(c.positionId) === String(position.id))
+        .map((candidate) => {
+          const voteCount = positionVotes.filter(
+            (v) => String(v.candidateId) === String(candidate.id)
+          ).length;
 
-    importedStudents.forEach((student) => {
-      if (!student.registrationNumber || !student.name) return;
+          const percentage =
+            totalVotesCast > 0
+              ? Number(((voteCount / totalVotesCast) * 100).toFixed(1))
+              : 0;
 
-      const normalizedReg = student.registrationNumber.trim().toUpperCase();
+          return {
+            id: candidate.id,
+            name: candidate.name,
+            manifesto: candidate.manifesto,
+            votes: voteCount,
+            voteCount,
+            percentage,
+          };
+        })
+        .sort((a, b) => b.voteCount - a.voteCount);
 
-      const existingIndex = users.findIndex(
-        (u) => u.registrationNumber.toUpperCase() === normalizedReg
-      );
-
-      const formattedUser: User = {
-        id: existingIndex !== -1 ? users[existingIndex].id : `u_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        registrationNumber: normalizedReg,
-        name: student.name.trim(),
-        role: 'STUDENT',
-        collegeId: student.collegeId?.trim() || undefined,
-        departmentId: student.departmentId?.trim() || undefined,
-        courseId: student.courseId?.trim() || undefined,
-        yearOfStudy: student.yearOfStudy ? Number(student.yearOfStudy) : undefined,
+      return {
+        id: position.id,
+        positionId: position.id,
+        name: position.name,
+        positionName: position.name,
+        totalVotesCast,
+        candidates: candidatesWithVotes,
       };
-
-      if (existingIndex !== -1) {
-        users[existingIndex] = formattedUser;
-      } else {
-        users.push(formattedUser);
-        addedCount++;
-      }
     });
+
+    const uniqueVoterIds = new Set(dbVotes.map((v) => String(v.userId)));
 
     return NextResponse.json(
       {
-        message: `Import completed successfully. Added ${addedCount} new students. Total register count: ${users.length}`,
-        totalCount: users.length,
+        totalVotes: dbVotes.length,
+        totalBallots: uniqueVoterIds.size,
+        positions: results,
+        results,
       },
-      { status: 200 }
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store, max-age=0, must-revalidate',
+        },
+      }
     );
-  } catch {
+  } catch (error) {
+    console.error('Error fetching election results:', error);
     return NextResponse.json(
-      { error: 'Failed to process student import.' },
+      { error: 'Failed to calculate election results.' },
       { status: 500 }
     );
   }

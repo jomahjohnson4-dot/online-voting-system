@@ -1,49 +1,56 @@
 import { NextResponse } from 'next/server';
-import { positions as dbPositions, candidates as dbCandidates } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export async function GET() {
-  const formattedPositions = dbPositions.map((pos) => {
-    // Cast pos to include optional candidates for safety checks
-    const currentPos = pos as typeof pos & { candidates?: typeof dbCandidates };
+  try {
+    // Fetch all positions from PostgreSQL along with their associated candidates
+    const positions = await db.position.findMany({
+      orderBy: { id: 'asc' },
+      include: {
+        candidates: true,
+      },
+    });
 
-    const matchingCandidates = Array.isArray(dbCandidates)
-      ? dbCandidates.filter((c) => c.positionId === pos.id)
-      : [];
-
-    return {
-      ...pos,
-      candidates:
-        Array.isArray(currentPos.candidates) && currentPos.candidates.length > 0
-          ? currentPos.candidates
-          : matchingCandidates,
-    };
-  });
-
-  return NextResponse.json(formattedPositions, {
-    status: 200,
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-    },
-  });
+    return NextResponse.json(positions, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching positions:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch positions' },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
-      return NextResponse.json({ error: 'Position name is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Position name is required' },
+        { status: 400 }
+      );
     }
 
-    const newPosition = {
-      id: `pos_${Date.now()}`,
-      electionId: body.electionId || 'el_1',
-      name: body.name.trim(),
-      candidates: [],
-    };
+    // Create a new position record in PostgreSQL
+    const newPosition = await db.position.create({
+      data: {
+        id: `pos_${Date.now()}`,
+        electionId: body.electionId || 'el_1',
+        name: body.name.trim(),
+      },
+      include: {
+        candidates: true,
+      },
+    });
 
-    dbPositions.push(newPosition);
     return NextResponse.json(newPosition, { status: 201 });
-  } catch {
+  } catch (error) {
+    console.error('Error creating position:', error);
     return NextResponse.json({ error: 'Invalid request body' }, { status: 500 });
   }
 }

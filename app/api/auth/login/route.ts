@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { users } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -15,27 +15,32 @@ export async function POST(request: Request) {
     const rawRegNo = String(body.registrationNumber).trim();
     const cleanRegNo = rawRegNo.toLowerCase();
 
-    // 1. Check existing records in memory (case-insensitive)
-    let user = users.find(
-      (u) => u.registrationNumber.trim().toLowerCase() === cleanRegNo
-    );
+    // 1. Query existing student record in PostgreSQL (case-insensitive)
+    let user = await db.user.findFirst({
+      where: {
+        registrationNumber: {
+          equals: rawRegNo,
+          mode: 'insensitive',
+        },
+      },
+    });
 
-    // 2. Fallback auto-registration for University numeric registration numbers (e.g., 25100529140070)
+    // 2. Fallback auto-registration for valid university registration numbers
     const isUniversityReg = /^\d{10,15}$/.test(rawRegNo);
 
     if (!user && (isUniversityReg || rawRegNo.length >= 8)) {
-      user = {
-        id: `u_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        registrationNumber: rawRegNo,
-        name: `Student (${rawRegNo})`,
-        role: 'STUDENT',
-        collegeId: 'COICT',
-        departmentId: 'CSE',
-        courseId: 'BIT',
-        yearOfStudy: 1,
-      };
-
-      users.push(user);
+      user = await db.user.create({
+        data: {
+          id: `u_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          registrationNumber: rawRegNo,
+          name: `Student (${rawRegNo})`,
+          role: 'STUDENT',
+          collegeId: 'COICT',
+          departmentId: 'CSE',
+          courseId: 'BIT',
+          yearOfStudy: 1,
+        },
+      });
     }
 
     if (!user) {

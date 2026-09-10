@@ -9,8 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@types/pdfkit": "^0.17.6",
     "next": "16.3.4",
     "papaparse": "^5.7.0",
+    "pdfkit": "^0.20.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -22,7 +25,12 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "prisma": "^6.19.3",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   }
 }
