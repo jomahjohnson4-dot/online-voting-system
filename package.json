@@ -11,6 +11,9 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@types/pdfkit": "^0.17.6",
+    "icons": "^1.0.0",
+    "lucide": "^1.63.0",
+    "lucide-react": "^1.63.0",
     "next": "16.3.4",
     "papaparse": "^5.7.0",
     "pdfkit": "^0.20.2",

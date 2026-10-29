@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-
+import { Flame,Shield } from 'lucide-react';
 export default function Home() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-blue-500 selection:text-white">
@@ -103,12 +103,12 @@ export default function Home() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-700/60 space-y-2">
-              <span className="text-2xl">🔒</span>
+              <span className="text-2xl"><Shield /></span>
               <h4 className="font-bold text-white text-sm">Secure Authentication</h4>
               <p className="text-xs text-slate-400">Only verified students with valid registration details can submit official ballots.</p>
             </div>
             <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-700/60 space-y-2">
-              <span className="text-2xl">⚡</span>
+              <span className="text-2xl"><Flame /></span>
               <h4 className="font-bold text-white text-sm">Real-time Turnout</h4>
               <p className="text-xs text-slate-400">Live vote standings and percentage tallies updated in real time.</p>
             </div>

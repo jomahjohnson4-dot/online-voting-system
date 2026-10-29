@@ -3,6 +3,7 @@
 import { useSyncExternalStore, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Lightbulb,Megaphone } from 'lucide-react';
 
 interface StudentSession {
   id: string;
@@ -122,7 +123,7 @@ export default function StudentDashboardPage() {
         {announcement && (
           <section className="bg-amber-50 border border-amber-200 p-5 rounded-2xl shadow-sm text-amber-900 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-lg">📢</span>
+              <span className="text-lg"><Megaphone /></span>
               <h2 className="font-bold text-base text-amber-950">Official Election Announcement</h2>
             </div>
             <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line bg-amber-100/50 p-3 rounded-xl border border-amber-200/60">
@@ -134,7 +135,7 @@ export default function StudentDashboardPage() {
         {/* App Guide & Permanent Voter Instructions Section */}
         <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <span className="text-lg">💡</span>
+            <span className="text-lg"><Lightbulb /></span>
             <h2 className="text-lg font-bold text-slate-900">About This Voting Application & Guidelines</h2>
           </div>
 

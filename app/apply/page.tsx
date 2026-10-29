@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Camera } from 'lucide-react';
 
 export default function ApplyCandidatePage() {
   const router = useRouter();
@@ -203,7 +204,7 @@ export default function ApplyCandidatePage() {
                     <img src={photoPreview} alt="Candidate Preview" className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-center px-2">
-                      <span className="text-2xl block mb-1">📷</span>
+                      <span className="text-2xl block mb-1"><Camera /></span>
                       <span className="text-[10px] text-slate-400 font-medium">No Photo Selected</span>
                     </div>
                   )}
