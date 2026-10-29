@@ -1,4 +1,4 @@
-import ExportCandidateActions from '../../../../components/ExportCandidateActions';
+import ExportCandidateActions from '@/app/components/ExportCandidateActions';
 
 export default function AdminCandidatesPage() {
   return (
