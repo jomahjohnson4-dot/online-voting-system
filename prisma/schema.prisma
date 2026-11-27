@@ -26,6 +26,16 @@ model User {
   votes              Vote[]
 }
 
+model Admin {
+  id        String   @id @default(uuid())
+  adminId   String   @unique
+  name      String
+  email     String?  @unique
+  phone     String?
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+}
+
 model Position {
   id         String      @id @default(uuid())
   electionId String
